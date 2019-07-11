@@ -16,15 +16,14 @@ var keyHex = "5826d6ae4e378e26c6dd6c14046d624d7cb168d30517cb57506d5518f29ab5c3"
 var ivHex = "242bd8fb399de07a0000000000000000"
 var blockSize = aes.BlockSize
 
-// AES block size is 16, the following number yields a gig of ram
-var numberOfBlocks = 67108864
-
 //var numberOfBlocks = 20
 var waiter sync.Mutex
 var wg sync.WaitGroup
 
 var iv, key, pt []byte
 
+// AES block size is 16, the default number yields a gig of ram
+var numberOfBlocks = flag.Int("blocks", 67108864, "number of AES blocks you want to encrypt")
 var threads = flag.Int("threads", 2, "set to the number of threads you want to use to concurrently encrypt")
 
 func (iv initializationVector) ctrSetBlockCount(c uint64) {
@@ -59,15 +58,15 @@ func main() {
 	flag.Parse()
 	key, _ = hex.DecodeString(keyHex)
 	iv, _ = hex.DecodeString(ivHex)
-	pt = make([]byte, blockSize*numberOfBlocks)
-	blocksPerThread := numberOfBlocks / *threads
+	pt = make([]byte, blockSize**numberOfBlocks)
+	blocksPerThread := *numberOfBlocks / *threads
 	currentBlock := 0
 	waiter.Lock()
 	for i := 0; i < *threads; i++ {
 		min := currentBlock
 		max := currentBlock + blocksPerThread
 		if i == (*threads - 1) {
-			max += numberOfBlocks % *threads
+			max += *numberOfBlocks % *threads
 		}
 		go encryptThread(min, max, i)
 		currentBlock += blocksPerThread
@@ -78,5 +77,7 @@ func main() {
 	wg.Wait()
 	t2 := time.Now()
 	elapsed := t2.Sub(t1)
-	fmt.Printf("Encrypted %v blocks in %v nanoseconds with %v threads\n", numberOfBlocks, elapsed.Nanoseconds(), *threads)
+	fmt.Printf("Encrypted %v blocks in %v nanoseconds with %v threads\n", *numberOfBlocks, elapsed.Nanoseconds(), *threads)
+	blocksPerSecond := 1000000000.0 / float32(elapsed.Nanoseconds()) * float32(*numberOfBlocks)
+	fmt.Printf("Blocks calculated at a rate of %.2f million per second\n", blocksPerSecond/1000000.0)
 }
