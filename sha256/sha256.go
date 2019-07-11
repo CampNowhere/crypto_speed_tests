@@ -61,5 +61,5 @@ func main() {
 	dur := e.Sub(t)
 	fmt.Println("Took", dur.Nanoseconds(), "nanoseconds")
 	hps := (1000000000.0 / float32(dur.Nanoseconds())) * float32(*hashes)
-	fmt.Printf("System calculated %.2f million SHA256 hashes per second!\n", hps/1000000.0)
+	fmt.Printf("System calculated %.2f million SHA256 hashes per second with %v threads!\n", hps/1000000.0, *threads)
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/aes"
-	"encoding/binary"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -10,40 +9,32 @@ import (
 	"time"
 )
 
-type initializationVector []byte
-
 var keyHex = "5826d6ae4e378e26c6dd6c14046d624d7cb168d30517cb57506d5518f29ab5c3"
 var ivHex = "242bd8fb399de07a0000000000000000"
 var blockSize = aes.BlockSize
 
-//var numberOfBlocks = 20
 var waiter sync.Mutex
 var wg sync.WaitGroup
 
-var iv, key, pt []byte
+var iv, key []byte
 
 // AES block size is 16, the default number yields a gig of ram
 var numberOfBlocks = flag.Int("blocks", 67108864, "number of AES blocks you want to encrypt")
 var threads = flag.Int("threads", 2, "set to the number of threads you want to use to concurrently encrypt")
-
-func (iv initializationVector) ctrSetBlockCount(c uint64) {
-	binary.LittleEndian.PutUint64(iv[8:16], c)
-}
 
 func encryptThread(min, max, threadID int) {
 	fmt.Printf("Starting thread %v with blocks %v through %v\n", threadID, min, max-1)
 	crypter, _ := aes.NewCipher(key)
 	myIv := make([]byte, 16)
 	buf := make([]byte, 16)
-	var blockAddress int
 	copy(myIv, iv)
+	// Starting each thread with a unique IV so each thread isn't doing the exact same work
+	myIv[len(myIv)-1] = byte(threadID)
 	waiter.Lock()
 	waiter.Unlock()
 	for i := min; i < max; i++ {
-		initializationVector(myIv).ctrSetBlockCount(uint64(i))
-		blockAddress = i * blockSize
 		crypter.Encrypt(buf, myIv)
-		sliceXor(pt[blockAddress:blockAddress+blockSize], buf)
+		copy(myIv, buf)
 	}
 	wg.Done()
 }
@@ -58,7 +49,6 @@ func main() {
 	flag.Parse()
 	key, _ = hex.DecodeString(keyHex)
 	iv, _ = hex.DecodeString(ivHex)
-	pt = make([]byte, blockSize**numberOfBlocks)
 	blocksPerThread := *numberOfBlocks / *threads
 	currentBlock := 0
 	waiter.Lock()
@@ -79,5 +69,5 @@ func main() {
 	elapsed := t2.Sub(t1)
 	fmt.Printf("Encrypted %v blocks in %v nanoseconds with %v threads\n", *numberOfBlocks, elapsed.Nanoseconds(), *threads)
 	blocksPerSecond := 1000000000.0 / float32(elapsed.Nanoseconds()) * float32(*numberOfBlocks)
-	fmt.Printf("Blocks calculated at a rate of %.2f million per second\n", blocksPerSecond/1000000.0)
+	fmt.Printf("Blocks calculated at a rate of %.2f million per second with %v threads\n", blocksPerSecond/1000000.0, *threads)
 }
